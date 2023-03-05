@@ -35,38 +35,6 @@ def partition(arr, low, high):
     arr[high] = temp
     return i
 
-def get_baselight_info(filename):
-    # Get lines from baselight file
-    lines = read_file(filename)
-
-    # Read each line
-    data = {}
-    for line in lines:
-        line_info = line.strip().split(" ")     # TODO: Does not take into account if file or folder has space
-        
-        # If "location" is not recorded in info yet, instantiate a list for its value
-        if line_info[0] not in data:
-            data[line_info[0]] = []
-
-        # Read frames
-        for frame in line_info[1:]:
-            if frame.isdigit():     # Avoid <err> or <null>
-                data[line_info[0]].append(frame)
-    
-    return compress_baselight_data(data)
-
-def compress_baselight_data(data):
-    new_data = []
-    i = 2
-    for frames in data:
-        if(i != 0):
-            i -= 1
-        else:
-            print(data[frames])
-            quicksort(data[frames], 0, (len(data[frames]) - 1))
-            print(data[frames])
-            break
-
 def get_xytech_info(filename):
     # Get lines from xytech file
     lines = read_file(filename)
@@ -95,6 +63,63 @@ def get_xytech_info(filename):
     
     return header.values(), locations
 
+def get_baselight_info(job, filename):
+    # Get lines from baselight file
+    lines = read_file(filename)
+
+    # Read each line
+    data = {}
+    for line in lines:
+        line_info = line.strip().split(" ")     # TODO: Does not take into account if file or folder has space
+        
+        if line_info[0] != "":
+            key = line_info[0].split(job)[1]    # Get rid of local storage path
+
+            # If "location" is not recorded in info yet, instantiate a list for its value
+            if key not in data:
+                data[key] = []
+
+            # Read frames
+            for frame in line_info[1:]:
+                if frame.isdigit():     # Avoid <err> or <null>
+                    data[key].append(frame)
+    
+    return compress_baselight_data(data)
+
+def compress_baselight_data(data):
+    for location in data:
+        # Sort first just in case
+        frames = data[location]
+        quicksort(frames, 0, (len(frames) - 1))
+
+        new_frames = []
+        i = frames[0]
+        j = frames[0]
+        for frame in frames:
+            if (int(frame) - int(j)) > 1:   # Difference with last frame is greater than 1 = not consecutive
+                if(i != j):
+                    new_frames.append(str(i) + "-" + str(j))    # Range
+                else:
+                    new_frames.append(i)    # No consecutive frame
+                i = frame
+            j = frame
+        if(i != j):
+            new_frames.append(str(i) + "-" + str(j))    # Range
+        else:
+            new_frames.append(i)    # No consecutive frame
+        data[location] = new_frames
+    return data
+
+def set_frames_to_location(job, locations, l_and_f):
+    for_csv = []
+    for loc in locations:
+        x = []
+        x.append(loc)
+        for frames in l_and_f[loc.split(job)[1]]:
+            x.append(frames)
+        for_csv.append(x)
+    return for_csv
+
 def main(args):
     if args.jobFolder is None:
         print("No job selected")
@@ -104,7 +129,8 @@ def main(args):
         xytech_filename = args.jobFolder + "/xytech.txt"
         header, locations = get_xytech_info(xytech_filename)
         baselight_filename = args.jobFolder + "/baselight_export.txt"
-        loc_and_frames = get_baselight_info(baselight_filename)
+        loc_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
+        sans_frames = set_frames_to_location(args.jobFolder, locations, loc_and_frames)
 
         csv_filename = args.jobFolder + ".csv"
         with open(csv_filename, 'w', newline='') as csv_file:
@@ -112,7 +138,8 @@ def main(args):
             writer.writerow(header)
             writer.writerow([])
             writer.writerow([])
-            writer.writerow([])
+            for work in sans_frames:
+                writer.writerow(work)
         csv_file.close()
     return 0
 

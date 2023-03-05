@@ -14,25 +14,58 @@ def read_file(filename):
     iofile.close()
     return lines
 
+def quicksort(arr, low, high):
+    if low < high:
+        mid = partition(arr, low, high)
+        quicksort(arr, low, (mid - 1))
+        quicksort(arr, (mid + 1), high)
+
+def partition(arr, low, high):
+    pivot = arr[high]
+    i = low - 1
+    for j in range(low, high):
+        if(int(arr[j]) <= int(pivot)):
+            i += 1
+            temp = arr[i]
+            arr[i] = arr[j]
+            arr[j] = temp
+    i += 1
+    temp = arr[i]
+    arr[i] = arr[high]
+    arr[high] = temp
+    return i
+
 def get_baselight_info(filename):
     # Get lines from baselight file
     lines = read_file(filename)
 
     # Read each line
-    info = {}
+    data = {}
     for line in lines:
         line_info = line.strip().split(" ")     # TODO: Does not take into account if file or folder has space
         
         # If "location" is not recorded in info yet, instantiate a list for its value
-        if line_info[0] not in info:
-            info[line_info[0]] = []
+        if line_info[0] not in data:
+            data[line_info[0]] = []
 
         # Read frames
         for frame in line_info[1:]:
             if frame.isdigit():     # Avoid <err> or <null>
-                info[line_info[0]].append(frame)
+                data[line_info[0]].append(frame)
     
-    return info
+    return compress_baselight_data(data)
+
+def compress_baselight_data(data):
+    new_data = []
+    i = 2
+    for frames in data:
+        if(i != 0):
+            i -= 1
+        else:
+            print(data[frames])
+            quicksort(data[frames], 0, (len(data[frames]) - 1))
+            print(data[frames])
+            break
 
 def get_xytech_info(filename):
     # Get lines from xytech file
@@ -71,7 +104,7 @@ def main(args):
         xytech_filename = args.jobFolder + "/xytech.txt"
         header, locations = get_xytech_info(xytech_filename)
         baselight_filename = args.jobFolder + "/baselight_export.txt"
-        get_baselight_info(baselight_filename)
+        loc_and_frames = get_baselight_info(baselight_filename)
 
         csv_filename = args.jobFolder + ".csv"
         with open(csv_filename, 'w', newline='') as csv_file:

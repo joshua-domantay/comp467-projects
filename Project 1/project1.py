@@ -4,6 +4,7 @@
 # 5 March 2023
 # Import / export data
 
+import os
 import sys
 import argparse
 import csv
@@ -124,7 +125,9 @@ def main(args):
     if args.jobFolder is None:
         print("No job selected")
         return 2
-    # else if(if directory not exists)
+    if not os.path.isdir(args.jobFolder):
+        print("Cannot find job")
+        return 1
     else:
         xytech_filename = args.jobFolder + "/xytech.txt"
         header, locations = get_xytech_info(xytech_filename)

@@ -8,11 +8,35 @@ import sys
 import argparse
 import csv
 
-def getXytechInfo(filename):
-    # Read xytech file
-    xytech_file = open(filename, 'r')
-    lines = xytech_file.readlines()
-    xytech_file.close()
+def read_file(filename):
+    iofile = open(filename, 'r')
+    lines = iofile.readlines()
+    iofile.close()
+    return lines
+
+def get_baselight_info(filename):
+    # Get lines from baselight file
+    lines = read_file(filename)
+
+    # Read each line
+    info = {}
+    for line in lines:
+        line_info = line.strip().split(" ")     # TODO: Does not take into account if file or folder has space
+        
+        # If "location" is not recorded in info yet, instantiate a list for its value
+        if line_info[0] not in info:
+            info[line_info[0]] = []
+
+        # Read frames
+        for frame in line_info[1:]:
+            if frame.isdigit():     # Avoid <err> or <null>
+                info[line_info[0]].append(frame)
+    
+    return info
+
+def get_xytech_info(filename):
+    # Get lines from xytech file
+    lines = read_file(filename)
 
     # Get header and locations info
     header = {
@@ -45,7 +69,9 @@ def main(args):
     # else if(if directory not exists)
     else:
         xytech_filename = args.jobFolder + "/xytech.txt"
-        header, locations = getXytechInfo(xytech_filename)
+        header, locations = get_xytech_info(xytech_filename)
+        baselight_filename = args.jobFolder + "/baselight_export.txt"
+        get_baselight_info(baselight_filename)
 
         csv_filename = args.jobFolder + ".csv"
         with open(csv_filename, 'w', newline='') as csv_file:

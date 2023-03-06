@@ -130,8 +130,14 @@ def main(args):
         return 1
     else:
         xytech_filename = args.jobFolder + "/xytech.txt"
+        if not os.path.exists(xytech_filename):
+            print("Xytech file is missing")
+            return 1
         header, locations = get_xytech_info(xytech_filename)
         baselight_filename = args.jobFolder + "/baselight_export.txt"
+        if not os.path.exists(baselight_filename):
+            print("Baselight export file is missing")
+            return 1
         loc_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
         sans_frames = set_frames_to_location(args.jobFolder, locations, loc_and_frames)
 

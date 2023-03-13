@@ -36,7 +36,7 @@ def partition(arr, low, high):
     arr[high] = temp
     return i
 
-def get_xytech_info(filename):
+def get_xytech_info(job, filename):
     # Get lines from xytech file
     lines = read_file(filename)
 
@@ -47,79 +47,68 @@ def get_xytech_info(filename):
         "job" : "",
         "notes" : ""
     }
-    locations = []
+    path = ""
     for i in range(len(lines)):
         if "location:" == lines[i].strip().lower():
+            # Get xytech file path
             i += 1
-            while lines[i].strip() != "":       # Add to locations until newline
-                locations.append(lines[i].strip())
-                i += 1
+            path = lines[i].strip()
+            path = path[:path.index(job)]
         if "notes:" == lines[i].strip().lower():
             header["notes"] = lines[i + 1].strip()
         elif ":" in lines[i]:
             line_info = lines[i].strip().split(":")
-            key = line_info[0].lower()
+            key = line_info[0].strip().lower()
             val = line_info[1].strip()
             header[key] = val
     
-    return header.values(), locations
+    return header.values(), path
 
 def get_baselight_info(job, filename):
     # Get lines from baselight file
     lines = read_file(filename)
-
     # Read each line
-    data = {}
+    data = []
     for line in lines:
         line_info = line.strip().split(" ")     # TODO: Does not take into account if file or folder has space
-        
         if line_info[0] != "":
-            key = line_info[0].split(job)[1]    # Get rid of local storage path
-
-            # If "location" is not recorded in info yet, instantiate a list for its value
-            if key not in data:
-                data[key] = []
-
-            # Read frames
-            for frame in line_info[1:]:
+            new_row = []
+            new_row.append(line_info[0].split(job)[1])      # Get path and remove local storage path
+            frames = []
+            for frame in line_info[1:]:     # Read frames
                 if frame.isdigit():     # Avoid <err> or <null>
-                    data[key].append(frame)
-    
+                    frames.append(frame)
+            new_row.append(frames)
+            data.append(new_row)
     return compress_baselight_data(data)
 
 def compress_baselight_data(data):
-    for location in data:
+    for i in range(len(data)):
         # Sort first just in case
-        frames = data[location]
+        frames = data[i][1]
         quicksort(frames, 0, (len(frames) - 1))
 
         new_frames = []
-        i = frames[0]
-        j = frames[0]
+        start_frame = frames[0]
+        last_frame = frames[0]
         for frame in frames:
-            if (int(frame) - int(j)) > 1:   # Difference with last frame is greater than 1 = not consecutive
-                if(i != j):
-                    new_frames.append(str(i) + "-" + str(j))    # Range
+            if((int(frame) - int(last_frame)) > 1):     # Difference with last frame is greater than 1 = not consecutive
+                if(start_frame != last_frame):
+                    new_frames.append(start_frame + "-" + last_frame)       # Range
                 else:
-                    new_frames.append(i)    # No consecutive frame
-                i = frame
-            j = frame
-        if(i != j):
-            new_frames.append(str(i) + "-" + str(j))    # Range
+                    new_frames.append(start_frame)      # No consecutive frame
+                start_frame = frame
+            last_frame = frame
+        if(start_frame != last_frame):
+            new_frames.append(str(start_frame) + "-" + str(last_frame))     # Range
         else:
-            new_frames.append(i)    # No consecutive frame
-        data[location] = new_frames
+            new_frames.append(start_frame)      # No consecutive frame
+        data[i][1] = new_frames
     return data
 
-def set_frames_to_location(job, locations, l_and_f):
-    for_csv = []
-    for loc in locations:
-        x = []
-        x.append(loc)
-        for frames in l_and_f[loc.split(job)[1]]:
-            x.append(frames)
-        for_csv.append(x)
-    return for_csv
+def add_sans_path_to_frames(job, path, job_and_frames):
+    for i in range(len(job_and_frames)):
+        job_and_frames[i][0] = path + job + job_and_frames[i][0]
 
 def main(args):
     if args.jobFolder is None:
@@ -133,13 +122,13 @@ def main(args):
         if not os.path.exists(xytech_filename):
             print("Xytech file is missing")
             return 1
-        header, locations = get_xytech_info(xytech_filename)
+        header, sans_path = get_xytech_info(args.jobFolder, xytech_filename)
         baselight_filename = args.jobFolder + "/baselight_export.txt"
         if not os.path.exists(baselight_filename):
             print("Baselight export file is missing")
             return 1
-        loc_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
-        sans_frames = set_frames_to_location(args.jobFolder, locations, loc_and_frames)
+        job_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
+        add_sans_path_to_frames(args.jobFolder, sans_path, job_and_frames)
 
         csv_filename = args.jobFolder + ".csv"
         with open(csv_filename, 'w', newline='') as csv_file:
@@ -147,8 +136,9 @@ def main(args):
             writer.writerow(header)
             writer.writerow([])
             writer.writerow([])
-            for work in sans_frames:
-                writer.writerow(work)
+            for work in job_and_frames:
+                for frames in work[1]:
+                    writer.writerow([work[0], frames])
         csv_file.close()
     return 0
 

@@ -6,8 +6,11 @@
 
 import os
 import sys
+import socket
+from datetime import datetime
 import argparse
 import csv
+import pymongo
 
 work_folder = "import_files"
 
@@ -81,11 +84,13 @@ def process_work_files(work_files, server_paths, verbose):
     for work_file in work_files:
         new_data = get_work_info(work_file)
         for i in new_data:
+            if verbose:
+                print(i[0], "->", i[1], "->", i[2])
             data.append(i)
     
     # Switch local paths to server paths
     for work in data:
-        work[0] = get_server_path(work[0], server_paths, verbose)
+        work[1] = get_server_path(work[1], server_paths, verbose)
 
     return data
 
@@ -102,6 +107,7 @@ def get_work_info(file_name):
             new_row = []
             frames = []
 
+            new_row.append(file_name.split("_")[1])     # Get user on file
             if(file_type == "baselight"):
                 new_row.append(line_info[0])        # Get path
                 old_frames = line_info[1:]
@@ -119,7 +125,7 @@ def get_work_info(file_name):
 def compress_frames(data):
     for i in range(len(data)):
         # Sort first just in case
-        frames = data[i][1]
+        frames = data[i][2]
         quicksort(frames, 0, (len(frames) - 1))
 
         new_frames = []
@@ -137,7 +143,7 @@ def compress_frames(data):
             new_frames.append(str(start_frame) + "-" + str(last_frame))     # Range
         else:
             new_frames.append(start_frame)      # No consecutive frame
-        data[i][1] = new_frames
+        data[i][2] = new_frames
     return data
 
 def get_server_path(local_path, server_paths, verbose):
@@ -196,12 +202,30 @@ def write_to_csv(xytech_info, jobs):
         writer.writerow([])
         writer.writerow([])
         for job in jobs:
-            for frames in job[1]:
-                writer.writerow([job[0], frames])
+            for frames in job[2]:
+                writer.writerow([job[1], frames])
     csv_file.close()
 
-def write_to_db(xytech_info, jobs):
+def write_to_db(xytech_info, jobs, work_files):
     pass
+    # client = pymongo.MongoClient("mongodb://localhost:27017/")
+    # db = client["project2"]
+
+    # # First collection: <user that ran script> <machine> <name of user on file> <date of file> <submitted date>
+    # col = db["script_users"]
+    # to_add = []
+    # for work_file in range(len(work_files)):
+    #     work_file_content = work_file.split("_")
+    #     to_add.append({
+    #         "user" : socket.gethostname(),
+    #         "machine" : work_file_content[0],
+    #         "user_on_file" : work_file_content[1],
+    #         "date_of_file" : work_file_content[2],
+    #         "submitted_date" : datetime.today().strftime("%Y%m%d")
+    #     })
+    # col.insert_many(to_add)
+
+    # # Second collection: <name of user on file> <date of file> <location> <frame/ranges>
 
 def main(args):
     valid_args = validate_args(args)
@@ -214,7 +238,7 @@ def main(args):
     if args.output.lower() == "csv":
         write_to_csv(xytech_info, jobs)
     else:
-        write_to_db(xytech_info, jobs)
+        write_to_db(xytech_info, jobs, args.workFiles)
 
     return 0
 

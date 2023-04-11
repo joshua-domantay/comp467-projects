@@ -107,7 +107,7 @@ def get_work_info(file_name):
             new_row = []
             frames = []
 
-            new_row.append(file_name.split("_")[1])     # Get user on file
+            new_row.append("_".join(file_name.split("_")[1:]))      # Get user on file
             if(file_type == "baselight"):
                 new_row.append(line_info[0])        # Get path
                 old_frames = line_info[1:]
@@ -194,38 +194,62 @@ def validate_args(args):
     
     return 0
 
-def write_to_csv(xytech_info, jobs):
+def write_to_csv(xytech_info, jobs, verbose):
     csv_file_name = "output.csv"
     with open(csv_file_name, 'w', newline='') as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(xytech_info.values())
+        if verbose:
+            print("Write to csv ->", xytech_info.values())
         writer.writerow([])
+        if verbose:
+            print("Write to csv ->")
         writer.writerow([])
+        if verbose:
+            print("Write to csv ->")
         for job in jobs:
             for frames in job[2]:
                 writer.writerow([job[1], frames])
+                if verbose:
+                    print("Write to csv ->", job[1], "=", frames)
     csv_file.close()
 
-def write_to_db(xytech_info, jobs, work_files):
-    pass
-    # client = pymongo.MongoClient("mongodb://localhost:27017/")
-    # db = client["project2"]
+def write_to_db(xytech_info, jobs, work_files, verbose):
+    client = pymongo.MongoClient("mongodb://localhost:27017/")
+    db = client["project2"]
 
-    # # First collection: <user that ran script> <machine> <name of user on file> <date of file> <submitted date>
-    # col = db["script_users"]
-    # to_add = []
-    # for work_file in range(len(work_files)):
-    #     work_file_content = work_file.split("_")
-    #     to_add.append({
-    #         "user" : socket.gethostname(),
-    #         "machine" : work_file_content[0],
-    #         "user_on_file" : work_file_content[1],
-    #         "date_of_file" : work_file_content[2],
-    #         "submitted_date" : datetime.today().strftime("%Y%m%d")
-    #     })
-    # col.insert_many(to_add)
+    # First collection: <user that ran script> <machine> <name of user on file> <date of file> <submitted date>
+    col = db["script_users"]
+    to_add = []
+    for work_file in work_files:
+        work_file_content = work_file.split("_")
+        info = {
+            "user" : socket.gethostname(),
+            "machine" : work_file_content[0],
+            "user_on_file" : work_file_content[1],
+            "date_of_file" : work_file_content[2].split(".")[0],
+            "submitted_date" : datetime.today().strftime("%Y%m%d")
+        }
+        to_add.append(info)
+        if verbose:
+            print("Write to MongoDB (db = project2, col = script_users)->", info)
+    col.insert_many(to_add)
 
-    # # Second collection: <name of user on file> <date of file> <location> <frame/ranges>
+    # Second collection: <name of user on file> <date of file> <location> <frame/ranges>
+    col = db["jobs"]
+    to_add = []
+    for job in jobs:
+        for frames in job[2]:
+            info = {
+                "user_on_file" : job[0].split("_")[0],
+                "date_of_file" : job[0].split("_")[1].split(".")[0],
+                "location" : job[1],
+                "frames" : frames
+            }
+            to_add.append(info)
+            if verbose:
+                print("Write to MongoDB (db = project2, col = jobs)->", info)
+    col.insert_many(to_add)
 
 def main(args):
     valid_args = validate_args(args)
@@ -236,9 +260,9 @@ def main(args):
     jobs = process_work_files(args.workFiles, xytech_paths, args.verbose)
 
     if args.output.lower() == "csv":
-        write_to_csv(xytech_info, jobs)
+        write_to_csv(xytech_info, jobs, args.verbose)
     else:
-        write_to_db(xytech_info, jobs, args.workFiles)
+        write_to_db(xytech_info, jobs, args.workFiles, args.verbose)
 
     return 0
 

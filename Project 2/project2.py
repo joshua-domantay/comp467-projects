@@ -9,8 +9,10 @@ import sys
 import argparse
 import csv
 
+work_folder = "import_files"
+
 def read_file(filename):
-    iofile = open(filename, 'r')
+    iofile = open(os.path.join(work_folder, filename), 'r')
     lines = iofile.readlines()
     iofile.close()
     return lines
@@ -36,37 +38,48 @@ def partition(arr, low, high):
     arr[high] = temp
     return i
 
-def get_xytech_info(job, filename):
+def get_xytech_info(filename):
     # Get lines from xytech file
     lines = read_file(filename)
 
-    # Get header and locations info
-    header = {
+    # Get info
+    info = {
         "producer" : "",
         "operator" : "",
         "job" : "",
-        "notes" : ""
+        "notes" : "",
     }
-    path = ""
+    server_paths = {}
     for i in range(len(lines)):
-        if "location:" == lines[i].strip().lower():
-            # Get xytech file path
-            i += 1
-            path = lines[i].strip()
-            path = path[:path.index(job)]
+        if "/" in lines[i].strip().lower():     # Get xytech file paths
+            server_paths[get_location_from_server(lines[i].strip())] = lines[i].strip()
         if "notes:" == lines[i].strip().lower():
-            header["notes"] = lines[i + 1].strip()
-        elif ":" in lines[i]:
+            info["notes"] = lines[i + 1].strip()
+        elif ":" in lines[i]:       # Producer, operator, job
             line_info = lines[i].strip().split(":")
+            if len(line_info[1]) == 0:      # No need to add location
+                continue
             key = line_info[0].strip().lower()
             val = line_info[1].strip()
-            header[key] = val
+            info[key] = val
     
-    return header.values(), path
+    return info, server_paths
+
+def get_location_from_server(job):
+    index = job.index("production") + len("production") + 1
+    return job[index:]
+
+# def process_work_files(work_files):
+#     data = []
+#     new_data = []
+#     for work_file in args.workFiles:
+#         new_data = []
+#         if work_file.split("_")[0].lower() == "baselight":
 
 def get_baselight_info(job, filename):
     # Get lines from baselight file
     lines = read_file(filename)
+    
     # Read each line
     data = []
     for line in lines:
@@ -110,42 +123,68 @@ def add_sans_path_to_frames(job, path, job_and_frames):
     for i in range(len(job_and_frames)):
         job_and_frames[i][0] = path + job + job_and_frames[i][0]
 
-def main(args):
-    if args.jobFolder is None:
-        print("No job selected")
+def validate_args(args):
+    # Check "work" folder (import_files)
+    if not os.path.exists(work_folder):
+        print("Folder " + work_folder + " does not exist")
         return 2
-    if not os.path.isdir(args.jobFolder):
-        print("Cannot find job")
-        return 1
-    else:
-        xytech_filename = args.jobFolder + "/xytech.txt"
-        if not os.path.exists(xytech_filename):
-            print("Xytech file is missing")
-            return 1
-        header, sans_path = get_xytech_info(args.jobFolder, xytech_filename)
-        baselight_filename = args.jobFolder + "/baselight_export.txt"
-        if not os.path.exists(baselight_filename):
-            print("Baselight export file is missing")
-            return 1
-        job_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
-        add_sans_path_to_frames(args.jobFolder, sans_path, job_and_frames)
 
-        csv_filename = args.jobFolder + ".csv"
-        with open(csv_filename, 'w', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerow(header)
-            writer.writerow([])
-            writer.writerow([])
-            for work in job_and_frames:
-                for frames in work[1]:
-                    writer.writerow([work[0], frames])
-        csv_file.close()
+    # Check work files
+    if args.workFiles is None:
+        print("No work file selected")
+        return 2
+    else:
+        for workFile in args.workFiles:
+            if not os.path.exists(os.path.join(work_folder, workFile)):
+                print("Work file is missing", workFile)
+                return 2
+
+    # Check Xytech file
+    if args.xytechFile is None:
+        print("No Xytech file selected")
+        return 2
+    else:
+        if not os.path.exists(os.path.join(work_folder, workFile)):
+            print("Xytech file is missing")
+            return 2
+
+    # Check output
+    if args.output is None:
+        print("No output selected")
+        return 2
+    else:
+        if((args.output.lower() != "csv") and (args.output.lower() != "database") and (args.output.lower() != "db")):
+            print("Selected output is invalid. Use: 'csv', 'database', or 'db'")
+            return 2
+    
+    return 0
+
+def main(args):
+    valid_args = validate_args(args)
+    if(valid_args != 0):
+        return valid_args
+
+    xytech_info, xytech_paths = get_xytech_info(args.xytechFile)
+    #job_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
+    # add_sans_path_to_frames(args.jobFolder, sans_path, job_and_frames)
+
+    csv_filename = "test" + ".csv"
+    with open(csv_filename, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(xytech_info.values())
+        writer.writerow([])
+        writer.writerow([])
+        # for work in job_and_frames:
+        #     for frames in work[1]:
+        #         writer.writerow([work[0], frames])
+    csv_file.close()
     return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--job", dest="jobFolder", help="job to process")
-    # parser.add_argument("--verbose", action="store_true", help="show verbose")
-    # parser.add_argument("--TC", dest="timecode", help="Timecode to process")
+    parser.add_argument("--files", nargs="+", dest="workFiles", help="files to process")        # Instead of *, use + because it requires at least 1 file
+    parser.add_argument("--xytech", dest="xytechFile", help="xytech file to process")
+    parser.add_argument("--verbose", action="store_true", help="show verbose")
+    parser.add_argument("--output", dest="output", help="output to csv or database")
     args = parser.parse_args()
     sys.exit(main(args))

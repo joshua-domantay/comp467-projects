@@ -1,7 +1,7 @@
 # Joshua Anthony Domantay
 # Kevin Chaja
 # COMP 467 - 21333
-# 5 March 2023
+# 16 April 2023
 # Import / export data
 
 import os
@@ -11,8 +11,8 @@ import csv
 
 work_folder = "import_files"
 
-def read_file(filename):
-    iofile = open(os.path.join(work_folder, filename), 'r')
+def read_file(file_name):
+    iofile = open(os.path.join(work_folder, file_name), 'r')
     lines = iofile.readlines()
     iofile.close()
     return lines
@@ -38,9 +38,9 @@ def partition(arr, low, high):
     arr[high] = temp
     return i
 
-def get_xytech_info(filename):
+def get_xytech_info(file_name):
     # Get lines from xytech file
-    lines = read_file(filename)
+    lines = read_file(file_name)
 
     # Get info
     info = {
@@ -69,16 +69,24 @@ def get_location_from_server(job):
     index = job.index("production") + len("production") + 1
     return job[index:]
 
-# def process_work_files(work_files):
-#     data = []
-#     new_data = []
-#     for work_file in args.workFiles:
-#         new_data = []
-#         if work_file.split("_")[0].lower() == "baselight":
+def process_work_files(work_files, server_paths):
+    data = []
+    new_data = []
+    for work_file in args.workFiles:
+        new_data = get_work_info(work_file)
+        for i in new_data:
+            data.append(i)
+    
+    # Switch local paths to server paths
+    for work in data:
+        work[0] = get_server_path(work[0], server_paths)
 
-def get_baselight_info(job, filename):
-    # Get lines from baselight file
-    lines = read_file(filename)
+    return data
+
+def get_work_info(file_name):
+    # Get lines from work file
+    lines = read_file(file_name)
+    file_type = file_name.split("_")[0].lower()
     
     # Read each line
     data = []
@@ -86,16 +94,23 @@ def get_baselight_info(job, filename):
         line_info = line.strip().split(" ")     # TODO: Does not take into account if file or folder has space
         if line_info[0] != "":
             new_row = []
-            new_row.append(line_info[0].split(job)[1])      # Get path and remove local storage path
             frames = []
-            for frame in line_info[1:]:     # Read frames
+
+            if(file_type == "baselight"):
+                new_row.append(line_info[0])        # Get path
+                old_frames = line_info[1:]
+            else:       # Flame
+                new_row.append(line_info[1])        # Get path
+                old_frames = line_info[2:]
+
+            for frame in old_frames:    # Read frames
                 if frame.isdigit():     # Avoid <err> or <null>
                     frames.append(frame)
             new_row.append(frames)
             data.append(new_row)
-    return compress_baselight_data(data)
+    return compress_frames(data)
 
-def compress_baselight_data(data):
+def compress_frames(data):
     for i in range(len(data)):
         # Sort first just in case
         frames = data[i][1]
@@ -119,9 +134,13 @@ def compress_baselight_data(data):
         data[i][1] = new_frames
     return data
 
-def add_sans_path_to_frames(job, path, job_and_frames):
-    for i in range(len(job_and_frames)):
-        job_and_frames[i][0] = path + job + job_and_frames[i][0]
+def get_server_path(local_path, server_paths):
+    split_path = local_path.split("/")
+    for i in range(len(split_path)):
+        processed_path = '/'.join(split_path[i:])
+        if server_paths.get(processed_path):
+            return server_paths.get(processed_path)
+    return local_path       # Should not be reached
 
 def validate_args(args):
     # Check "work" folder (import_files)
@@ -159,25 +178,34 @@ def validate_args(args):
     
     return 0
 
+def write_to_csv(xytech_info, jobs):
+    csv_file_name = "output.csv"
+    with open(csv_file_name, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(xytech_info.values())
+        writer.writerow([])
+        writer.writerow([])
+        for job in jobs:
+            for frames in job[1]:
+                writer.writerow([job[0], frames])
+    csv_file.close()
+
+def write_to_db(xytech_info, jobs):
+    pass
+
 def main(args):
     valid_args = validate_args(args)
     if(valid_args != 0):
         return valid_args
 
     xytech_info, xytech_paths = get_xytech_info(args.xytechFile)
-    #job_and_frames = get_baselight_info(args.jobFolder, baselight_filename)
-    # add_sans_path_to_frames(args.jobFolder, sans_path, job_and_frames)
+    jobs = process_work_files(args.workFiles, xytech_paths)
 
-    csv_filename = "test" + ".csv"
-    with open(csv_filename, 'w', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        writer.writerow(xytech_info.values())
-        writer.writerow([])
-        writer.writerow([])
-        # for work in job_and_frames:
-        #     for frames in work[1]:
-        #         writer.writerow([work[0], frames])
-    csv_file.close()
+    if args.output.lower() == "csv":
+        write_to_csv(xytech_info, jobs)
+    else:
+        write_to_db(xytech_info, jobs)
+
     return 0
 
 if __name__ == "__main__":

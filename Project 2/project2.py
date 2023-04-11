@@ -38,7 +38,7 @@ def partition(arr, low, high):
     arr[high] = temp
     return i
 
-def get_xytech_info(file_name):
+def get_xytech_info(file_name, verbose):
     # Get lines from xytech file
     lines = read_file(file_name)
 
@@ -53,8 +53,12 @@ def get_xytech_info(file_name):
     for i in range(len(lines)):
         if "/" in lines[i].strip().lower():     # Get xytech file paths
             server_paths[get_location_from_server(lines[i].strip())] = lines[i].strip()
+            if verbose:
+                print(lines[i].strip() + " -> " + get_location_from_server(lines[i].strip()))
         if "notes:" == lines[i].strip().lower():
             info["notes"] = lines[i + 1].strip()
+            if verbose:
+                print("notes ->", lines[i + 1].strip())
         elif ":" in lines[i]:       # Producer, operator, job
             line_info = lines[i].strip().split(":")
             if len(line_info[1]) == 0:      # No need to add location
@@ -62,6 +66,8 @@ def get_xytech_info(file_name):
             key = line_info[0].strip().lower()
             val = line_info[1].strip()
             info[key] = val
+            if verbose:
+                print(key, "->",  val)
     
     return info, server_paths
 
@@ -69,17 +75,17 @@ def get_location_from_server(job):
     index = job.index("production") + len("production") + 1
     return job[index:]
 
-def process_work_files(work_files, server_paths):
+def process_work_files(work_files, server_paths, verbose):
     data = []
     new_data = []
-    for work_file in args.workFiles:
+    for work_file in work_files:
         new_data = get_work_info(work_file)
         for i in new_data:
             data.append(i)
     
     # Switch local paths to server paths
     for work in data:
-        work[0] = get_server_path(work[0], server_paths)
+        work[0] = get_server_path(work[0], server_paths, verbose)
 
     return data
 
@@ -100,7 +106,7 @@ def get_work_info(file_name):
                 new_row.append(line_info[0])        # Get path
                 old_frames = line_info[1:]
             else:       # Flame
-                new_row.append(line_info[1])        # Get path
+                new_row.append(line_info[1])        # Get path. No need to get storage from flame
                 old_frames = line_info[2:]
 
             for frame in old_frames:    # Read frames
@@ -134,12 +140,16 @@ def compress_frames(data):
         data[i][1] = new_frames
     return data
 
-def get_server_path(local_path, server_paths):
+def get_server_path(local_path, server_paths, verbose):
     split_path = local_path.split("/")
     for i in range(len(split_path)):
         processed_path = '/'.join(split_path[i:])
         if server_paths.get(processed_path):
+            if verbose:
+                print(local_path, "-> local path to server path ->", server_paths.get(processed_path))
             return server_paths.get(processed_path)
+    if verbose:
+        print("ERROR translating to server path ->", local_path)
     return local_path       # Should not be reached
 
 def validate_args(args):
@@ -198,8 +208,8 @@ def main(args):
     if(valid_args != 0):
         return valid_args
 
-    xytech_info, xytech_paths = get_xytech_info(args.xytechFile)
-    jobs = process_work_files(args.workFiles, xytech_paths)
+    xytech_info, xytech_paths = get_xytech_info(args.xytechFile, args.verbose)
+    jobs = process_work_files(args.workFiles, xytech_paths, args.verbose)
 
     if args.output.lower() == "csv":
         write_to_csv(xytech_info, jobs)

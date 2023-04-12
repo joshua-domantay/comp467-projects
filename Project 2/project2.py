@@ -227,7 +227,7 @@ def write_to_db(xytech_info, jobs, work_files, verbose):
             "user" : socket.gethostname(),
             "machine" : work_file_content[0],
             "user_on_file" : work_file_content[1],
-            "date_of_file" : work_file_content[2].split(".")[0],
+            "date_of_file" : int(work_file_content[2].split(".")[0]),
             "submitted_date" : datetime.today().strftime("%Y%m%d")
         }
         to_add.append(info)
@@ -242,7 +242,7 @@ def write_to_db(xytech_info, jobs, work_files, verbose):
         for frames in job[2]:
             info = {
                 "user_on_file" : job[0].split("_")[0],
-                "date_of_file" : job[0].split("_")[1].split(".")[0],
+                "date_of_file" : int(job[0].split("_")[1].split(".")[0]),
                 "location" : job[1],
                 "frames" : frames
             }

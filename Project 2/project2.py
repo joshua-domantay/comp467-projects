@@ -179,7 +179,7 @@ def validate_args(args):
         print("No Xytech file selected")
         return 2
     else:
-        if not os.path.exists(os.path.join(work_folder, workFile)):
+        if not os.path.exists(os.path.join(work_folder, args.xytechFile)):
             print("Xytech file is missing")
             return 2
 

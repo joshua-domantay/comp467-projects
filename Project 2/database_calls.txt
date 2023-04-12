@@ -1,0 +1,79 @@
+For Project 2 submission in Canvas
+
+1. List all work done by TDanza
+db.jobs.find({user_on_file:"TDanza"})
+
+2. All work done before 3-25-2023 date on a Flame
+db.jobs.aggregate([
+    {
+        $lookup:{
+            from:"script_users",
+            let:{
+                user:"$user_on_file",
+                date:"$date_of_file"
+            },
+            pipeline:[
+                {
+                    $match:{
+                        $expr:{
+                            $and:[
+                                {
+                                    $eq:[
+                                        "$user_on_file",
+                                        "$$user"
+                                    ]
+                                },
+                                {
+                                    $eq:[
+                                        "$date_of_file",
+                                        "$$date"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            ], as:"result"
+        }
+    },
+    {
+        $match:{
+            "result.date_of_file":{$lt:20230325},
+            "result.machine":"Flame"
+        }
+    },
+    {
+        $replaceRoot:{
+            newRoot:{
+                $mergeObjects:[
+                    {
+                        $arrayElemAt:[
+                            "$result",
+                            0
+                        ]
+                    },
+                    {
+                        location:"$$ROOT.location"
+                    },
+                    {
+                        frames:"$$ROOT.frames"
+                    }
+                ]
+            }
+        }
+    },
+    {
+        $project:{
+            "user_on_file":1,
+            "date_of_file":1,
+            "location":1,
+            "frames":1
+        }
+    }
+])
+
+3. What work done on hpsans13 on date 3-26-2023
+db.jobs.find({$and:[{date_of_file:20230326}, {location:/.*hpsans13.*/i}]})
+
+4. Name of all Autodesk Flame users
+db.script_users.distinct("user_on_file", {machine:"Flame"})

@@ -16,6 +16,7 @@ import json
 import pymongo
 import shlex
 import subprocess
+import xlwt
 
 work_folder = "import_files"
 
@@ -175,8 +176,13 @@ def validate_args(args):
         if not os.path.exists(os.path.join(work_folder, args.video)):
             print("Video does not exist")
             return 2
-        else:
-            return 0
+        elif args.output is None:       # Check output
+            print("No output selected")
+            return 2
+        elif args.output.lower() != "xls":
+            print("Selected output is invalid. Output to 'xls' only")
+            return 2
+        return 0
 
     # Check work files
     if args.workFiles is None:
@@ -202,8 +208,8 @@ def validate_args(args):
         print("No output selected")
         return 2
     else:
-        if((args.output.lower() != "csv") and (args.output.lower() != "database") and (args.output.lower() != "db")):
-            print("Selected output is invalid. Use: 'csv', 'database', or 'db'")
+        if((args.output.lower() != "csv") and (args.output.lower() != "database") and (args.output.lower() != "db") and (args.output.lower() != "xls")):
+            print("Selected output is invalid. Use: 'csv', 'database', 'db', or 'xls")
             return 2
     
     return 0
@@ -228,7 +234,7 @@ def write_to_csv(xytech_info, jobs, verbose):
                     print("Write to csv ->", job[1], "=", frames)
     csv_file.close()
 
-def write_to_db(xytech_info, jobs, work_files, verbose):
+def write_to_db(jobs, work_files, verbose):
     client = pymongo.MongoClient("mongodb://localhost:27017/")
     db = client["project2"]
 
@@ -265,14 +271,54 @@ def write_to_db(xytech_info, jobs, work_files, verbose):
                 print("Write to MongoDB (db = project2, col = jobs)->", info)
     col.insert_many(to_add)
 
+def write_to_xls(xytech_info, jobs, verbose):
+    xls_file_name = "output.xls"
+    xls_workbook = xlwt.Workbook()
+    xls_worksheet = xls_workbook.add_sheet("Sheet1")
+
+    col_index = 0
+    for value in xytech_info.values():
+        xls_worksheet.write(0, col_index, value)
+        col_index += 1
+        if verbose:
+            print("Write to xls ->", value)
+    
+    row_index = 3
+    for i in range(len(jobs)):
+        for frames in jobs[i][2]:
+            xls_worksheet.write(row_index, 0, jobs[i][1])
+            xls_worksheet.write(row_index, 1, frames)
+            if verbose:
+                print("Write to xls ->", jobs[i][1], "=", frames)
+            row_index += 1
+    
+    xls_workbook.save(xls_file_name)
+
 def workflow(args):
     xytech_info, xytech_paths = get_xytech_info(args.xytechFile, args.verbose)
     jobs = process_work_files(args.workFiles, xytech_paths, args.verbose)
 
     if args.output.lower() == "csv":
         write_to_csv(xytech_info, jobs, args.verbose)
+    elif args.output.lower() == "xls":
+        write_to_xls(xytech_info, jobs, args.verbose)
     else:
         write_to_db(xytech_info, jobs, args.workFiles, args.verbose)
+
+def get_jobs_under(args, frames):
+    client = pymongo.MongoClient("mongodb://localhost:27017/")
+    db = client["project2"]
+    col = db["jobs"]
+    
+    jobs = col.find()
+    result = []
+    for job in jobs:
+        if "-" in job["frames"]:
+            if int(job["frames"].split("-")[1]) <= frames:
+                result.append(job)
+                if args.verbose:
+                    print("Found job under " + str(frames) + " - User " + str(job["user_on_file"]) + ", frames " + str(job["frames"]))
+    return result
 
 def frames_to_timecode(frames, fps):
     partA = datetime.timedelta(seconds=(int(int(frames) / fps)))
@@ -280,14 +326,18 @@ def frames_to_timecode(frames, fps):
     return (str(partA) + ":" + "{:02}".format(partB))
 
 def process_video(args):
-    print("Hello")
-
     video_data = ffmpeg.probe(os.path.join(work_folder, args.video))["streams"]
     video_fps = int(video_data[0]["r_frame_rate"].split("/")[0])
     video_duration = float(video_data[0]["duration"])
     video_frames = round(video_duration * video_fps)
 
-    print(frames_to_timecode(video_frames, video_fps))
+    if args.verbose:
+        print("Video fps: " + str(video_fps))
+        print("Video duration: " + str(video_duration))
+        print("Video frames: " + str(video_frames))
+        print("Video timecode: " + str(frames_to_timecode(video_frames, video_fps)))
+    
+    jobs = get_jobs_under(args, video_frames)
 
 def main(args):
     valid_args = validate_args(args)
@@ -306,7 +356,7 @@ if __name__ == "__main__":
     parser.add_argument("--files", nargs="+", dest="workFiles", help="files to process")    # Instead of *, use + because it requires at least 1 file
     parser.add_argument("--xytech", dest="xytechFile", help="xytech file to process")
     parser.add_argument("--verbose", action="store_true", help="show verbose")
-    parser.add_argument("--output", dest="output", help="output to csv or database")
+    parser.add_argument("--output", dest="output", help="output to csv, xls, or database")
     parser.add_argument("--process", dest="video", help="video to process")
     args = parser.parse_args()
     sys.exit(main(args))

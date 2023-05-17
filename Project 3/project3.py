@@ -294,6 +294,20 @@ def write_to_xls(xytech_info, jobs, verbose):
     
     xls_workbook.save(xls_file_name)
 
+def write_video_to_xls(jobs, verbose):
+    xls_file_name = "output.xls"
+    xls_workbook = xlwt.Workbook()
+    xls_worksheet = xls_workbook.add_sheet("Sheet1")
+    
+    for i in range(len(jobs)):
+        xls_worksheet.write(i, 0, jobs[i]["location"])
+        xls_worksheet.write(i, 1, jobs[i]["frames"])
+        xls_worksheet.write(i, 2, jobs[i]["timecode"])
+        if verbose:
+            print("Write to xls ->", jobs[i]["location"], "=", jobs[i]["frames"], "=", jobs[i]["timecode"])
+    
+    xls_workbook.save(xls_file_name)
+
 def workflow(args):
     xytech_info, xytech_paths = get_xytech_info(args.xytechFile, args.verbose)
     jobs = process_work_files(args.workFiles, xytech_paths, args.verbose)
@@ -338,6 +352,14 @@ def process_video(args):
         print("Video timecode: " + str(frames_to_timecode(video_frames, video_fps)))
     
     jobs = get_jobs_under(args, video_frames)
+    for job in jobs:
+        frame_range = job["frames"].split("-")
+        frame_range[0] = frames_to_timecode(frame_range[0], video_fps)
+        frame_range[1] = frames_to_timecode(frame_range[1], video_fps)
+        job["timecode"] = '-'.join(frame_range)
+        if args.verbose:
+            print("Convert frame range", job["frames"], "to timecode", job["timecode"])
+    write_video_to_xls(jobs, args.verbose)
 
 def main(args):
     valid_args = validate_args(args)

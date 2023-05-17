@@ -10,7 +10,12 @@ import socket
 from datetime import datetime
 import argparse
 import csv
+import datetime
+import ffmpeg
+import json
 import pymongo
+import shlex
+import subprocess
 
 work_folder = "import_files"
 
@@ -269,8 +274,20 @@ def workflow(args):
     else:
         write_to_db(xytech_info, jobs, args.workFiles, args.verbose)
 
+def frames_to_timecode(frames, fps):
+    partA = datetime.timedelta(seconds=(int(int(frames) / fps)))
+    partB = int(frames) % fps
+    return (str(partA) + ":" + "{:02}".format(partB))
+
 def process_video(args):
     print("Hello")
+
+    video_data = ffmpeg.probe(os.path.join(work_folder, args.video))["streams"]
+    video_fps = int(video_data[0]["r_frame_rate"].split("/")[0])
+    video_duration = float(video_data[0]["duration"])
+    video_frames = round(video_duration * video_fps)
+
+    print(frames_to_timecode(video_frames, video_fps))
 
 def main(args):
     valid_args = validate_args(args)
@@ -286,7 +303,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--files", nargs="+", dest="workFiles", help="files to process")        # Instead of *, use + because it requires at least 1 file
+    parser.add_argument("--files", nargs="+", dest="workFiles", help="files to process")    # Instead of *, use + because it requires at least 1 file
     parser.add_argument("--xytech", dest="xytechFile", help="xytech file to process")
     parser.add_argument("--verbose", action="store_true", help="show verbose")
     parser.add_argument("--output", dest="output", help="output to csv or database")

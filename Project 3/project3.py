@@ -16,6 +16,7 @@ import json
 import pymongo
 import shlex
 import subprocess
+import xlsxwriter
 import xlwt
 
 work_folder = "import_files"
@@ -214,8 +215,28 @@ def validate_args(args):
     
     return 0
 
+def get_video_thumbnail(video_file, video_data, frame_range, index):
+    frame_range = frame_range.split("-")
+    middle_frame = round(((int(frame_range[1]) - int(frame_range[0])) / 2) + int(frame_range[0]))
+    middle_timecode = convert_frames_to_timecode(middle_frame, video_data["fps"])
+
+    # Convert frames to ms
+    middle_timecode = middle_timecode.split(":")
+    middle_timecode[len(middle_timecode) - 1] = int(middle_timecode[len(middle_timecode) - 1]) / int(video_data["fps"])
+    middle_timecode = ':'.join(middle_timecode[:-1]) + str(middle_timecode[len(middle_timecode) - 1])[1:]
+
+    # 96x74 thumbnail
+    w = 96
+    h = 74
+    # x = int((int(video_data["width"]) / 2) - (w / 2))       # Original x value so thumbnail is from middle
+    # y = int((int(video_data["height"]) / 2) - (h / 2))
+    x = 555
+    y = 506
+    command = f"ffmpeg -i {video_file} -ss {middle_timecode} -vf \"crop={w}:{h}:{x}:{y}\" -vframes 1 xls_thumbnails/thumbnail{index}.jpg"
+    subprocess.run(shlex.split(command), shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, input=b'yes\n')
+
 def write_to_csv(xytech_info, jobs, verbose):
-    csv_file_name = "output.csv"
+    csv_file_name = "output.csv" 
     with open(csv_file_name, 'w', newline='') as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(xytech_info.values())
@@ -294,19 +315,21 @@ def write_to_xls(xytech_info, jobs, verbose):
     
     xls_workbook.save(xls_file_name)
 
-def write_video_to_xls(jobs, verbose):
+def write_video_to_xls(video_file, jobs, verbose):
     xls_file_name = "output.xls"
-    xls_workbook = xlwt.Workbook()
-    xls_worksheet = xls_workbook.add_sheet("Sheet1")
-    
+    xls_workbook = xlsxwriter.Workbook(xls_file_name)
+    xls_worksheet = xls_workbook.add_worksheet()
+
     for i in range(len(jobs)):
-        xls_worksheet.write(i, 0, jobs[i]["location"])
-        xls_worksheet.write(i, 1, jobs[i]["frames"])
-        xls_worksheet.write(i, 2, jobs[i]["timecode"])
+        xls_worksheet.write(("A" + str(i + 1)), jobs[i]["location"])
+        xls_worksheet.write(("B" + str(i + 1)), jobs[i]["frames"])
+        xls_worksheet.write(("C" + str(i + 1)), jobs[i]["timecode"])
         if verbose:
             print("Write to xls ->", jobs[i]["location"], "=", jobs[i]["frames"], "=", jobs[i]["timecode"])
+        get_video_thumbnail(video_file, jobs[i]["video_data"], jobs[i]["frames"], i)
+        xls_worksheet.insert_image(("D" + str(i + 1)), f"xls_thumbnails/thumbnail{i}.jpg")
     
-    xls_workbook.save(xls_file_name)
+    xls_workbook.close()
 
 def workflow(args):
     xytech_info, xytech_paths = get_xytech_info(args.xytechFile, args.verbose)
@@ -334,13 +357,14 @@ def get_jobs_under(args, frames):
                     print("Found job under " + str(frames) + " - User " + str(job["user_on_file"]) + ", frames " + str(job["frames"]))
     return result
 
-def frames_to_timecode(frames, fps):
+def convert_frames_to_timecode(frames, fps):
     partA = datetime.timedelta(seconds=(int(int(frames) / fps)))
     partB = int(frames) % fps
     return (str(partA) + ":" + "{:02}".format(partB))
 
 def process_video(args):
-    video_data = ffmpeg.probe(os.path.join(work_folder, args.video))["streams"]
+    video_file = str(work_folder) + "/" + str(args.video)
+    video_data = ffmpeg.probe(video_file)["streams"]
     video_fps = int(video_data[0]["r_frame_rate"].split("/")[0])
     video_duration = float(video_data[0]["duration"])
     video_frames = round(video_duration * video_fps)
@@ -349,17 +373,22 @@ def process_video(args):
         print("Video fps: " + str(video_fps))
         print("Video duration: " + str(video_duration))
         print("Video frames: " + str(video_frames))
-        print("Video timecode: " + str(frames_to_timecode(video_frames, video_fps)))
+        print("Video timecode: " + str(convert_frames_to_timecode(video_frames, video_fps)))
     
     jobs = get_jobs_under(args, video_frames)
     for job in jobs:
         frame_range = job["frames"].split("-")
-        frame_range[0] = frames_to_timecode(frame_range[0], video_fps)
-        frame_range[1] = frames_to_timecode(frame_range[1], video_fps)
+        frame_range[0] = convert_frames_to_timecode(frame_range[0], video_fps)
+        frame_range[1] = convert_frames_to_timecode(frame_range[1], video_fps)
         job["timecode"] = '-'.join(frame_range)
         if args.verbose:
             print("Convert frame range", job["frames"], "to timecode", job["timecode"])
-    write_video_to_xls(jobs, args.verbose)
+        job["video_data"] = {
+            "fps" : video_fps,
+            "width" : video_data[0]["width"],
+            "height" : video_data[0]["height"]
+        }
+    write_video_to_xls(video_file, jobs, args.verbose)
 
 def main(args):
     valid_args = validate_args(args)

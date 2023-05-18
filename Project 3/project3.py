@@ -226,13 +226,9 @@ def get_video_thumbnail(video_file, video_data, frame_range, index):
     middle_timecode = ':'.join(middle_timecode[:-1]) + str(middle_timecode[len(middle_timecode) - 1])[1:]
 
     # 96x74 thumbnail
-    w = 96
-    h = 74
-    # x = int((int(video_data["width"]) / 2) - (w / 2))       # Original x value so thumbnail is from middle
-    # y = int((int(video_data["height"]) / 2) - (h / 2))
-    x = 555
-    y = 506
-    command = f"ffmpeg -i {video_file} -ss {middle_timecode} -vf \"crop={w}:{h}:{x}:{y}\" -vframes 1 xls_thumbnails/thumbnail{index}.jpg"
+    scaleW = 96
+    scaleH = 74
+    command = f"ffmpeg -i {video_file} -ss {middle_timecode} -vf \"scale={scaleW}:{scaleH}\" -vframes 1 xls_thumbnails/thumbnail{index}.jpg"
     subprocess.run(shlex.split(command), shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, input=b'yes\n')
 
 def write_to_csv(xytech_info, jobs, verbose):
